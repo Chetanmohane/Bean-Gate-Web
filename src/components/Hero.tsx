@@ -49,7 +49,7 @@ const Hero = () => {
               <span className="text-gray-300">→</span>
               <span className="text-[#ff5500]">Build</span>
               <span className="text-gray-300">→</span>
-              <span className="text-[#ff5500]">Lead</span>
+              <span className="text-[#ff5500]">Innovate</span>
             </p>
 
             {/* Description */}
