@@ -51,41 +51,60 @@ const Offer = ({
     }
   }, [appliedDiscount]);
 
-  const handleApplyReferral = () => {
-    let validCodes = ["BEANGATE10", "REF10", "MERN10"];
+  const handleApplyReferral = async () => {
     let parsed: any[] = [];
     try {
-      const stored = localStorage.getItem("bg_ref_codes");
-      if (stored) {
-        parsed = JSON.parse(stored);
-        validCodes = parsed.map((c: any) => c.code.trim().toUpperCase());
+      const res = await fetch("/api/refcodes");
+      if (res.ok) {
+        parsed = await res.json();
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e) {}
+
+    if (!parsed || parsed.length === 0) {
+      try {
+        const stored = localStorage.getItem("bg_ref_codes");
+        if (stored) parsed = JSON.parse(stored);
+      } catch (e) {}
     }
 
     const inputCode = referralCode.trim().toUpperCase();
-    if (validCodes.includes(inputCode)) {
-      const matchedCode = parsed.find((c: any) => c.code.trim().toUpperCase() === inputCode);
-      if (matchedCode && (!matchedCode.active || (matchedCode.uses || 0) > 0)) {
+    if (!inputCode) return;
+
+    const matchedCode = parsed.find((c: any) => c.code && c.code.trim().toUpperCase() === inputCode);
+    const isFallbackDefault = ["BEANGATE10", "REF10", "MERN10"].includes(inputCode);
+
+    if (matchedCode) {
+      if (!matchedCode.active || (matchedCode.uses || 0) > 0) {
         setPromoError("This referral code has already been used.");
         setPromoSuccess("");
         setAppliedDiscount(false);
       } else {
+        const pType = matchedCode.planType || "all";
+        const currentPlan = formData.plan || selectedPlanId || "one-time";
+        if (pType !== "all" && pType !== currentPlan) {
+          const planNames: Record<string, string> = {
+            "one-time": "One-Time Payment Plan",
+            "inst-1": "1st Installment Plan",
+            "inst-2": "2nd Installment Plan"
+          };
+          setPromoError(`This referral code is valid only for ${planNames[pType] || pType}.`);
+          setPromoSuccess("");
+          setAppliedDiscount(false);
+          return;
+        }
+
         setAppliedDiscount(true);
-        setPromoSuccess("Referral code applied! 10% Discount saved.");
+        setPromoSuccess(`Referral code applied! ${matchedCode.discount || "Discount saved."}`);
         setPromoError("");
       }
+    } else if (isFallbackDefault) {
+      setAppliedDiscount(true);
+      setPromoSuccess("Referral code applied! 10% Discount saved.");
+      setPromoError("");
     } else {
-      const isFallbackDefault = ["BEANGATE10", "REF10", "MERN10"].includes(inputCode);
-      if (isFallbackDefault) {
-        setAppliedDiscount(true);
-        setPromoSuccess("Referral code applied! 10% Discount saved.");
-        setPromoError("");
-      } else {
-        setPromoError("Invalid referral code.");
-        setPromoSuccess("");
-      }
+      setPromoError("Invalid referral code.");
+      setPromoSuccess("");
+      setAppliedDiscount(false);
     }
   };
 
@@ -206,10 +225,50 @@ const Offer = ({
     });
   };
 
-  const basePrice = 6000;
-  const currentPrice = appliedDiscount ? basePrice * 0.9 : basePrice;
-  const saveAmount = 15000 - currentPrice;
-  const savePercent = Math.round((saveAmount / 15000) * 100);
+  const getPlanCfg = () => {
+    try {
+      const s = localStorage.getItem("bg_plan_config");
+      return s ? JSON.parse(s) : null;
+    } catch { return null; }
+  };
+
+  const [adminCfg, setAdminCfg] = useState<any>(getPlanCfg());
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch("/api/planconfig");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.courseName) setAdminCfg(data);
+        }
+      } catch (e) {}
+    };
+    fetchConfig();
+    const handleUpdate = () => setAdminCfg(getPlanCfg());
+    window.addEventListener("planConfigUpdated", handleUpdate);
+    return () => window.removeEventListener("planConfigUpdated", handleUpdate);
+  }, []);
+
+  const oneTimePrice = adminCfg?.oneTimePrice ?? 6000;
+  const originalPrice = adminCfg?.oneTimeOriginalPrice ?? 15000;
+  const inst1Price = adminCfg?.installment1Price ?? 3200;
+
+  const defaultDiscPct = adminCfg?.discountPercent ?? 10;
+  const oneTimeDiscPct = adminCfg?.oneTimeDiscountPercent ?? defaultDiscPct;
+  const inst1DiscPct = adminCfg?.installment1DiscountPercent ?? defaultDiscPct;
+
+  const discOneTime = Math.round(oneTimePrice * (1 - oneTimeDiscPct / 100));
+  const discInst1 = Math.round(inst1Price * (1 - inst1DiscPct / 100));
+
+  const isOneTime = formData.plan === "one-time";
+  const basePrice = isOneTime ? oneTimePrice : inst1Price;
+  const currentDiscPct = isOneTime ? oneTimeDiscPct : inst1DiscPct;
+
+  const currentPrice = appliedDiscount ? Math.round(basePrice * (1 - currentDiscPct / 100)) : basePrice;
+  const saveAmount = Math.max(0, originalPrice - currentPrice);
+  const savePercent = Math.round((saveAmount / originalPrice) * 100);
+
 
   return (
     <section id="reviews" className="py-20 bg-gray-50 scroll-mt-24">
@@ -407,8 +466,8 @@ const Offer = ({
                   onChange={handleChange}
                   className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none"
                 >
-                  <option value="one-time">One-Time Payment Plan ({appliedDiscount ? "₹5,400" : "₹6,000"})</option>
-                  <option value="inst-1">Flexible Installment Plan ({appliedDiscount ? "₹2,880" : "₹3,200"})</option>
+                  <option value="one-time">One-Time Payment Plan ({appliedDiscount ? `₹${discOneTime.toLocaleString("en-IN")}` : `₹${oneTimePrice.toLocaleString("en-IN")}`})</option>
+                  <option value="inst-1">Flexible Installment Plan ({appliedDiscount ? `₹${discInst1.toLocaleString("en-IN")}` : `₹${inst1Price.toLocaleString("en-IN")}`})</option>
                 </select>
               </div>
 

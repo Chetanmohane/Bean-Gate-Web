@@ -11,7 +11,7 @@ const PlanConfig = require('./models/PlanConfig');
 const SubAdmin = require('./models/SubAdmin');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Middleware
 app.use(cors());
@@ -163,17 +163,57 @@ app.delete('/api/refcodes/:id', async (req, res) => {
 // 4. Plan Config
 app.get('/api/planconfig', async (req, res) => {
   try {
-    const data = await PlanConfig.findOne();
-    res.json(data);
+    let data = await PlanConfig.findOne();
+    if (!data) {
+      data = await PlanConfig.create({
+        courseName: "MERN Stack",
+        courseTagline: "Full Stack Web Development",
+        oneTimePrice: 6000,
+        oneTimeOriginalPrice: 15000,
+        installment1Price: 3200,
+        installment2Price: 3200,
+        discountPercent: 10,
+        oneTimeDiscountPercent: 10,
+        installment1DiscountPercent: 10,
+        installment2DiscountPercent: 10,
+      });
+    }
+    const docObj = data.toObject();
+    if (docObj.oneTimeDiscountPercent === undefined) docObj.oneTimeDiscountPercent = docObj.discountPercent ?? 10;
+    if (docObj.installment1DiscountPercent === undefined) docObj.installment1DiscountPercent = docObj.discountPercent ?? 10;
+    if (docObj.installment2DiscountPercent === undefined) docObj.installment2DiscountPercent = docObj.discountPercent ?? 10;
+    res.json(docObj);
   } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
-app.put('/api/planconfig/:id', async (req, res) => {
+const saveOrUpdatePlanConfig = async (body, idParam) => {
+  if (idParam) {
+    const updated = await PlanConfig.findByIdAndUpdate(idParam, body, { new: true, upsert: true });
+    return updated;
+  }
+  const existing = await PlanConfig.findOne();
+  if (existing) {
+    const updated = await PlanConfig.findByIdAndUpdate(existing._id, body, { new: true });
+    return updated;
+  }
+  const created = await PlanConfig.create(body);
+  return created;
+};
+
+app.post('/api/planconfig', async (req, res) => {
   try {
-    const updated = await PlanConfig.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updated = await saveOrUpdatePlanConfig(req.body, req.body._id);
     res.json(updated);
   } catch (error) { res.status(400).json({ message: error.message }); }
 });
+
+app.put('/api/planconfig/:id?', async (req, res) => {
+  try {
+    const updated = await saveOrUpdatePlanConfig(req.body, req.params.id);
+    res.json(updated);
+  } catch (error) { res.status(400).json({ message: error.message }); }
+});
+
 
 // 5. Sub-Admins
 app.get('/api/subadmins', async (req, res) => {

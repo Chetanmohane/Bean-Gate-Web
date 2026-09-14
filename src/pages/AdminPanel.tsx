@@ -36,8 +36,10 @@ interface Payment {
 }
 
 interface RefCode {
+  _id?: string;
   code: string;
   discount: string;
+  planType?: string; // "all" | "one-time" | "inst-1" | "inst-2"
   active: boolean;
   created: string;
   uses: number;
@@ -55,13 +57,17 @@ interface SubAdmin {
 
 // ─── Plan Configuration ────────────────────────────────────────────────
 interface PlanConfig {
+  _id?: string;
   courseName: string;
   courseTagline: string;
-  oneTimePrice: number;
-  oneTimeOriginalPrice: number;
-  installment1Price: number;
-  installment2Price: number;
-  discountPercent: number;
+  oneTimePrice: number | string;
+  oneTimeOriginalPrice: number | string;
+  installment1Price: number | string;
+  installment2Price: number | string;
+  discountPercent: number | string;
+  oneTimeDiscountPercent?: number | string;
+  installment1DiscountPercent?: number | string;
+  installment2DiscountPercent?: number | string;
   oneTimeFeatures: string[];
   installmentFeatures: string[];
 }
@@ -70,16 +76,19 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
   courseName: "MERN Stack",
   courseTagline: "Full Stack Web Development",
   oneTimePrice: 6000,
-  oneTimeOriginalPrice: 15001,
+  oneTimeOriginalPrice: 15000,
   installment1Price: 3200,
   installment2Price: 3200,
   discountPercent: 10,
+  oneTimeDiscountPercent: 10,
+  installment1DiscountPercent: 10,
+  installment2DiscountPercent: 10,
   oneTimeFeatures: [
     "Full MERN Stack Course Access",
     "Practical Hands-on Training",
     "100% Placement Assistance",
     "Course Completion Certificate",
-    "Save 10% Extra using Referral Codes",
+    "Save Extra using Referral Codes",
   ],
   installmentFeatures: [
     "Full MERN Stack Course Access",
@@ -92,12 +101,24 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
 const loadPlanConfig = (): PlanConfig => {
   try {
     const s = localStorage.getItem("bg_plan_config");
-    return s ? { ...DEFAULT_PLAN_CONFIG, ...JSON.parse(s) } : DEFAULT_PLAN_CONFIG;
+    if (!s) return DEFAULT_PLAN_CONFIG;
+    const parsed = JSON.parse(s);
+    return {
+      ...DEFAULT_PLAN_CONFIG,
+      ...parsed,
+      oneTimeDiscountPercent: parsed.oneTimeDiscountPercent ?? parsed.discountPercent ?? 10,
+      installment1DiscountPercent: parsed.installment1DiscountPercent ?? parsed.discountPercent ?? 10,
+      installment2DiscountPercent: parsed.installment2DiscountPercent ?? parsed.discountPercent ?? 10,
+    };
   } catch { return DEFAULT_PLAN_CONFIG; }
 };
 
-const savePlanConfig = (cfg: PlanConfig) =>
-  localStorage.setItem("bg_plan_config", JSON.stringify(cfg));
+const savePlanConfig = (cfg: PlanConfig) => {
+  try {
+    localStorage.setItem("bg_plan_config", JSON.stringify(cfg));
+  } catch (e) { console.error(e); }
+};
+
 
 // ─── Admin Credentials (Simple static auth — change as needed) ─────────
 const ADMIN_USER = "chetanmohane27@gmail.com";
@@ -299,8 +320,43 @@ const PlansTab = () => {
   const [cfg, setCfg] = useState<PlanConfig>(loadPlanConfig);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    const fetchRemoteConfig = async () => {
+      try {
+        const res = await fetch("/api/planconfig");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.courseName) {
+            const merged: PlanConfig = {
+              ...DEFAULT_PLAN_CONFIG,
+              ...data,
+              oneTimeDiscountPercent: data.oneTimeDiscountPercent ?? data.discountPercent ?? 10,
+              installment1DiscountPercent: data.installment1DiscountPercent ?? data.discountPercent ?? 10,
+              installment2DiscountPercent: data.installment2DiscountPercent ?? data.discountPercent ?? 10,
+            };
+            setCfg(merged);
+            savePlanConfig(merged);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch remote plan config:", err);
+      }
+    };
+    fetchRemoteConfig();
+  }, []);
+
   const update = (key: keyof PlanConfig, value: string | number | string[]) =>
     setCfg(prev => ({ ...prev, [key]: value }));
+
+  const updateDefaultDiscount = (val: string | number) => {
+    setCfg(prev => ({
+      ...prev,
+      discountPercent: val,
+      oneTimeDiscountPercent: val,
+      installment1DiscountPercent: val,
+      installment2DiscountPercent: val,
+    }));
+  };
 
   const updateFeature = (plan: "oneTimeFeatures" | "installmentFeatures", idx: number, val: string) => {
     const arr = [...cfg[plan]];
@@ -314,16 +370,52 @@ const PlansTab = () => {
   const removeFeature = (plan: "oneTimeFeatures" | "installmentFeatures", idx: number) =>
     update(plan, cfg[plan].filter((_, i) => i !== idx));
 
-  const handleSave = () => {
-    savePlanConfig(cfg);
+  const handleSave = async () => {
+    const payload = {
+      ...cfg,
+      oneTimePrice: Number(cfg.oneTimePrice) || 0,
+      oneTimeOriginalPrice: Number(cfg.oneTimeOriginalPrice) || 0,
+      installment1Price: Number(cfg.installment1Price) || 0,
+      installment2Price: Number(cfg.installment2Price) || 0,
+      discountPercent: Number(cfg.discountPercent) || 0,
+      oneTimeDiscountPercent: Number(cfg.oneTimeDiscountPercent !== undefined && cfg.oneTimeDiscountPercent !== "" ? cfg.oneTimeDiscountPercent : cfg.discountPercent) || 0,
+      installment1DiscountPercent: Number(cfg.installment1DiscountPercent !== undefined && cfg.installment1DiscountPercent !== "" ? cfg.installment1DiscountPercent : cfg.discountPercent) || 0,
+      installment2DiscountPercent: Number(cfg.installment2DiscountPercent !== undefined && cfg.installment2DiscountPercent !== "" ? cfg.installment2DiscountPercent : cfg.discountPercent) || 0,
+    };
+
+    savePlanConfig(payload as any);
+    try {
+      await fetch("/api/planconfig", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      console.error("Error saving plan config to API:", e);
+    }
+    window.dispatchEvent(new Event("planConfigUpdated"));
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const discountedOneTime = Math.round(cfg.oneTimePrice * (1 - cfg.discountPercent / 100));
-  const discountedInst = Math.round(cfg.installment1Price * (1 - cfg.discountPercent / 100));
+  const oneTimeDiscVal = cfg.oneTimeDiscountPercent !== undefined && cfg.oneTimeDiscountPercent !== "" ? cfg.oneTimeDiscountPercent : (cfg.discountPercent ?? 10);
+  const inst1DiscVal   = cfg.installment1DiscountPercent !== undefined && cfg.installment1DiscountPercent !== "" ? cfg.installment1DiscountPercent : (cfg.discountPercent ?? 10);
+  const inst2DiscVal   = cfg.installment2DiscountPercent !== undefined && cfg.installment2DiscountPercent !== "" ? cfg.installment2DiscountPercent : (cfg.discountPercent ?? 10);
 
-  const inputCls = "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/10 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:border-indigo-500 transition";
+  const numOneTimePrice = Number(cfg.oneTimePrice) || 0;
+  const numOneTimeOriginalPrice = Number(cfg.oneTimeOriginalPrice) || 0;
+  const numInst1Price = Number(cfg.installment1Price) || 0;
+  const numInst2Price = Number(cfg.installment2Price) || 0;
+
+  const numOneTimeDisc = Number(oneTimeDiscVal) || 0;
+  const numInst1Disc   = Number(inst1DiscVal) || 0;
+  const numInst2Disc   = Number(inst2DiscVal) || 0;
+
+  const discountedOneTime = Math.round(numOneTimePrice * (1 - numOneTimeDisc / 100));
+  const discountedInst1   = Math.round(numInst1Price * (1 - numInst1Disc / 100));
+  const discountedInst2   = Math.round(numInst2Price * (1 - numInst2Disc / 100));
+
+  const inputCls = "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/10 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:border-indigo-500 transition font-medium";
   const labelCls = "block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2";
 
   return (
@@ -331,7 +423,7 @@ const PlansTab = () => {
       <div className="flex items-start justify-between mb-1">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Course Plans & Pricing</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">Edit pricing plans — changes reflect live on the website instantly.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">Edit pricing plans and referral discounts — changes reflect live on the website instantly.</p>
         </div>
         <button onClick={handleSave}
           className={`px-6 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer border-none flex items-center gap-2 shadow-md active:scale-[0.98] ${
@@ -345,7 +437,7 @@ const PlansTab = () => {
 
       {/* Course Info */}
       <Card className="p-6 mb-6 mt-6">
-        <p className="text-sm font-extrabold text-slate-800 dark:text-white mb-4">Course Information</p>
+        <p className="text-sm font-extrabold text-slate-800 dark:text-white mb-4">Course Basic Information</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Course Name</label>
@@ -355,9 +447,78 @@ const PlansTab = () => {
             <label className={labelCls}>Course Tagline</label>
             <input className={inputCls} value={cfg.courseTagline} onChange={e => update("courseTagline", e.target.value)} placeholder="e.g. Full Stack Web Development" />
           </div>
-          <div>
-            <label className={labelCls}>Referral Code Discount (%)</label>
-            <input type="number" min="0" max="50" className={inputCls} value={cfg.discountPercent} onChange={e => update("discountPercent", parseInt(e.target.value) || 0)} />
+        </div>
+      </Card>
+
+      {/* DEDICATED REFERRAL DISCOUNT SETTINGS CARD */}
+      <Card className="p-6 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-7 rounded-full bg-violet-600"></div>
+          <p className="text-sm font-extrabold text-slate-800 dark:text-white">🎯 Referral Discount Settings (%)</p>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5 font-semibold">
+          Set official referral discount percentages for each plan type. Newly generated discount codes automatically use these rates.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="bg-indigo-50/70 dark:bg-indigo-500/5 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-500/15">
+            <label className={labelCls + " text-indigo-700 dark:text-indigo-300 font-extrabold"}>One-Time Plan Discount (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              className={inputCls + " bg-white dark:bg-slate-900 font-extrabold text-base"}
+              value={oneTimeDiscVal}
+              onChange={e => update("oneTimeDiscountPercent", e.target.value)}
+            />
+            <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-2">
+              Base Fee After Code: ₹{discountedOneTime.toLocaleString("en-IN")}
+            </p>
+          </div>
+
+          <div className="bg-blue-50/70 dark:bg-blue-500/5 p-4 rounded-2xl border border-blue-100 dark:border-blue-500/15">
+            <label className={labelCls + " text-blue-700 dark:text-blue-300 font-extrabold"}>1st Inst. Discount (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              className={inputCls + " bg-white dark:bg-slate-900 font-extrabold text-base"}
+              value={inst1DiscVal}
+              onChange={e => update("installment1DiscountPercent", e.target.value)}
+            />
+            <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold mt-2">
+              1st Fee After Code: ₹{discountedInst1.toLocaleString("en-IN")}
+            </p>
+          </div>
+
+          <div className="bg-purple-50/70 dark:bg-purple-500/5 p-4 rounded-2xl border border-purple-100 dark:border-purple-500/15">
+            <label className={labelCls + " text-purple-700 dark:text-purple-300 font-extrabold"}>2nd Inst. Discount (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              className={inputCls + " bg-white dark:bg-slate-900 font-extrabold text-base"}
+              value={inst2DiscVal}
+              onChange={e => update("installment2DiscountPercent", e.target.value)}
+            />
+            <p className="text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2">
+              2nd Fee After Code: ₹{discountedInst2.toLocaleString("en-IN")}
+            </p>
+          </div>
+
+          <div className="bg-slate-100/70 dark:bg-white/5 p-4 rounded-2xl border border-slate-200 dark:border-white/10">
+            <label className={labelCls + " text-slate-700 dark:text-slate-300 font-extrabold"}>Default Discount (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              className={inputCls + " bg-white dark:bg-slate-900 font-extrabold text-base"}
+              value={cfg.discountPercent}
+              onChange={e => updateDefaultDiscount(e.target.value)}
+            />
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-2">
+              Fallback discount rate
+            </p>
           </div>
         </div>
       </Card>
@@ -367,22 +528,22 @@ const PlansTab = () => {
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-5">
             <div className="w-2 h-8 rounded-full bg-indigo-500"></div>
-            <p className="font-extrabold text-slate-800 dark:text-white text-sm">One-Time Payment Plan</p>
+            <p className="font-extrabold text-slate-800 dark:text-white text-sm">One-Time Payment Plan Pricing</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
               <label className={labelCls}>Full Price (₹)</label>
-              <input type="number" min="0" className={inputCls} value={cfg.oneTimePrice} onChange={e => update("oneTimePrice", parseInt(e.target.value) || 0)} />
+              <input type="number" min="0" className={inputCls} value={cfg.oneTimePrice} onChange={e => update("oneTimePrice", e.target.value)} />
             </div>
             <div>
-              <label className={labelCls}>Original / Crossed Price (₹)</label>
-              <input type="number" min="0" className={inputCls} value={cfg.oneTimeOriginalPrice} onChange={e => update("oneTimeOriginalPrice", parseInt(e.target.value) || 0)} />
+              <label className={labelCls}>Original Price (₹)</label>
+              <input type="number" min="0" className={inputCls} value={cfg.oneTimeOriginalPrice} onChange={e => update("oneTimeOriginalPrice", e.target.value)} />
             </div>
           </div>
 
-          <div className="bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-100 dark:border-indigo-500/15 rounded-xl px-4 py-3 mb-5 text-xs font-semibold text-orange-700 dark:text-indigo-400">
-            With {cfg.discountPercent}% referral code: <span className="font-extrabold">₹{discountedOneTime.toLocaleString("en-IN")}</span>
+          <div className="bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-100 dark:border-indigo-500/15 rounded-xl px-4 py-3 mb-5 text-xs font-semibold text-indigo-700 dark:text-indigo-400">
+            With {numOneTimeDisc}% referral code: <span className="font-extrabold text-emerald-600 dark:text-emerald-400">₹{discountedOneTime.toLocaleString("en-IN")}</span> (Base Fee)
           </div>
 
           <div>
@@ -409,22 +570,22 @@ const PlansTab = () => {
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-5">
             <div className="w-2 h-8 rounded-full bg-blue-500"></div>
-            <p className="font-extrabold text-slate-800 dark:text-white text-sm">Flexible Installment Plan</p>
+            <p className="font-extrabold text-slate-800 dark:text-white text-sm">Flexible Installment Plan Pricing</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
               <label className={labelCls}>1st Installment (₹)</label>
-              <input type="number" min="0" className={inputCls} value={cfg.installment1Price} onChange={e => update("installment1Price", parseInt(e.target.value) || 0)} />
+              <input type="number" min="0" className={inputCls} value={cfg.installment1Price} onChange={e => update("installment1Price", e.target.value)} />
             </div>
             <div>
               <label className={labelCls}>2nd Installment (₹)</label>
-              <input type="number" min="0" className={inputCls} value={cfg.installment2Price} onChange={e => update("installment2Price", parseInt(e.target.value) || 0)} />
+              <input type="number" min="0" className={inputCls} value={cfg.installment2Price} onChange={e => update("installment2Price", e.target.value)} />
             </div>
           </div>
 
           <div className="bg-blue-50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/15 rounded-xl px-4 py-3 mb-5 text-xs font-semibold text-blue-700 dark:text-blue-400">
-            With {cfg.discountPercent}% referral code: 1st ₹{discountedInst.toLocaleString("en-IN")} · 2nd ₹{Math.round(cfg.installment2Price * (1 - cfg.discountPercent / 100)).toLocaleString("en-IN")}
+            With Referral Code: 1st <span className="font-extrabold text-emerald-600 dark:text-emerald-400">₹{discountedInst1.toLocaleString("en-IN")}</span> ({numInst1Disc}% OFF) · 2nd <span className="font-extrabold text-emerald-600 dark:text-emerald-400">₹{discountedInst2.toLocaleString("en-IN")}</span> ({numInst2Disc}% OFF)
           </div>
 
           <div>
@@ -454,15 +615,15 @@ const PlansTab = () => {
         <div className="flex flex-wrap gap-4">
           <div className="flex-1 min-w-[180px] bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-100 dark:border-indigo-500/15 rounded-2xl px-5 py-4">
             <p className="text-xs text-indigo-500 dark:text-indigo-400 font-bold uppercase tracking-wider mb-1">One-Time Plan</p>
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-white">₹{cfg.oneTimePrice.toLocaleString("en-IN")}</p>
-            <p className="text-xs text-slate-400 line-through mt-0.5">₹{cfg.oneTimeOriginalPrice.toLocaleString("en-IN")}</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">With code: ₹{discountedOneTime.toLocaleString("en-IN")}</p>
+            <p className="text-2xl font-extrabold text-slate-900 dark:text-white">₹{numOneTimePrice.toLocaleString("en-IN")}</p>
+            <p className="text-xs text-slate-400 line-through mt-0.5">₹{numOneTimeOriginalPrice.toLocaleString("en-IN")}</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">With {numOneTimeDisc}% Code: ₹{discountedOneTime.toLocaleString("en-IN")}</p>
           </div>
           <div className="flex-1 min-w-[180px] bg-blue-50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/15 rounded-2xl px-5 py-4">
             <p className="text-xs text-blue-500 dark:text-blue-400 font-bold uppercase tracking-wider mb-1">Installment Plan</p>
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-white">₹{cfg.installment1Price.toLocaleString("en-IN")}<span className="text-sm font-semibold text-slate-400 ml-1">/mo</span></p>
-            <p className="text-xs text-slate-400 mt-0.5">2nd: ₹{cfg.installment2Price.toLocaleString("en-IN")}</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">With code: ₹{discountedInst.toLocaleString("en-IN")}/mo</p>
+            <p className="text-2xl font-extrabold text-slate-900 dark:text-white">₹{numInst1Price.toLocaleString("en-IN")} <span className="text-xs text-slate-500">/ 1st</span></p>
+            <p className="text-xs text-slate-500 mt-0.5">2nd: ₹{numInst2Price.toLocaleString("en-IN")}</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">With Code: 1st ₹{discountedInst1.toLocaleString("en-IN")} · 2nd ₹{discountedInst2.toLocaleString("en-IN")}</p>
           </div>
         </div>
       </Card>
@@ -470,13 +631,23 @@ const PlansTab = () => {
   );
 };
 
+
+
 // ═══════════════════════════════════════════════════════════════════════
 // REFERRAL CODES TAB (Admin view)
 // ═══════════════════════════════════════════════════════════════════════
 const ReferralTab = () => {
   const [codes, setCodes] = useState<RefCode[]>([]);
+  const [planCfg, setPlanCfg] = useState<PlanConfig>(loadPlanConfig);
 
   useEffect(() => {
+    fetch("/api/planconfig")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.courseName) setPlanCfg(prev => ({ ...prev, ...data }));
+      })
+      .catch(e => console.warn(e));
+
     fetch("/api/refcodes")
       .then(async res => {
         if (!res.ok) throw new Error("Server returned " + res.status);
@@ -491,19 +662,26 @@ const ReferralTab = () => {
           const stored = localStorage.getItem("bg_ref_codes");
           if (stored) setCodes(JSON.parse(stored));
           else setCodes([
-            { code: "BEANGATE10", discount: "10%", active: true, created: "2024-07-01", uses: 0 },
-            { code: "MERN10",     discount: "10%", active: true, created: "2024-07-01", uses: 0 },
-            { code: "REF10",      discount: "10%", active: true, created: "2024-07-01", uses: 0 },
+            { code: "BEANGATE10", discount: "10% OFF", planType: "all", active: true, created: "2024-07-01", uses: 0 },
+            { code: "MERN10",     discount: "10% OFF", planType: "all", active: true, created: "2024-07-01", uses: 0 },
+            { code: "REF10",      discount: "10% OFF", planType: "all", active: true, created: "2024-07-01", uses: 0 },
           ]);
         } catch {}
       });
   }, []);
+
   const [newCode, setNewCode] = useState("");
+  const [selectedPlanType, setSelectedPlanType] = useState("all");
   const [copied, setCopied] = useState("");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  const defDisc = Number(planCfg.discountPercent) || 10;
+  const oneTimeDisc = Number(planCfg.oneTimeDiscountPercent !== undefined && planCfg.oneTimeDiscountPercent !== "" ? planCfg.oneTimeDiscountPercent : defDisc) || defDisc;
+  const inst1Disc = Number(planCfg.installment1DiscountPercent !== undefined && planCfg.installment1DiscountPercent !== "" ? planCfg.installment1DiscountPercent : defDisc) || defDisc;
+  const inst2Disc = Number(planCfg.installment2DiscountPercent !== undefined && planCfg.installment2DiscountPercent !== "" ? planCfg.installment2DiscountPercent : defDisc) || defDisc;
 
   const filteredCodes = codes.filter(c => {
     const matchesSearch = c.code.toLowerCase().includes(search.toLowerCase()) || 
@@ -560,9 +738,27 @@ const ReferralTab = () => {
   };
 
   const addCode = async () => {
-    const trimmed = newCode.trim().toUpperCase();
-    if (!trimmed || codes.find((c) => c.code === trimmed)) return;
-    const newCodeObj = { code: trimmed, discount: "10%", active: true, created: new Date().toISOString().split("T")[0], uses: 0, creator: "admin" };
+    let trimmed = newCode.trim().toUpperCase();
+    if (!trimmed) {
+      const hex = Math.random().toString(16).substr(2, 6).toUpperCase();
+      trimmed = `BG-ADMIN-${hex}`;
+    }
+    if (codes.find((c) => c.code === trimmed)) return;
+
+    let discountLabel = `${defDisc}% OFF`;
+    if (selectedPlanType === "one-time") discountLabel = `${oneTimeDisc}% OFF (One-Time Plan)`;
+    else if (selectedPlanType === "inst-1") discountLabel = `${inst1Disc}% OFF (1st Inst.)`;
+    else if (selectedPlanType === "inst-2") discountLabel = `${inst2Disc}% OFF (2nd Inst.)`;
+
+    const newCodeObj: RefCode = {
+      code: trimmed,
+      discount: discountLabel,
+      planType: selectedPlanType,
+      active: true,
+      created: new Date().toISOString().split("T")[0],
+      uses: 0,
+      creator: "admin"
+    };
     
     try {
       const res = await fetch("/api/refcodes", {
@@ -573,15 +769,85 @@ const ReferralTab = () => {
       if(res.ok) {
         const saved = await res.json();
         setCodes([...codes, saved]);
+      } else {
+        setCodes([...codes, newCodeObj]);
       }
-    } catch(err) { console.error(err); }
+    } catch(err) {
+      console.error(err);
+      setCodes([...codes, newCodeObj]);
+    }
     
     setNewCode("");
   };
 
+  const [editingCode, setEditingCode] = useState<RefCode | null>(null);
+  const [editModalForm, setEditModalForm] = useState({
+    code: "",
+    discount: "",
+    planType: "all",
+    active: true
+  });
+
+  const openEditModal = (c: RefCode) => {
+    setEditingCode(c);
+    setEditModalForm({
+      code: c.code,
+      discount: c.discount,
+      planType: c.planType || "all",
+      active: c.active
+    });
+  };
+
+  const saveEditCode = async () => {
+    if (!editingCode) return;
+    const trimmedCode = editModalForm.code.trim().toUpperCase();
+    if (!trimmedCode) return;
+
+    const updatedObj: RefCode = {
+      ...editingCode,
+      code: trimmedCode,
+      discount: editModalForm.discount.trim() || `${defDisc}% OFF`,
+      planType: editModalForm.planType,
+      active: editModalForm.active
+    };
+
+    const id = editingCode._id;
+    if (id) {
+      try {
+        const res = await fetch(`/api/refcodes/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedObj)
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setCodes(codes.map(c => c._id === id ? saved : c));
+        } else {
+          setCodes(codes.map(c => c._id === id ? updatedObj : c));
+        }
+      } catch (e) {
+        console.error(e);
+        setCodes(codes.map(c => c._id === id ? updatedObj : c));
+      }
+    } else {
+      setCodes(codes.map(c => c.code === editingCode.code ? updatedObj : c));
+    }
+
+    try {
+      const stored = localStorage.getItem("bg_ref_codes");
+      if (stored) {
+        const all: RefCode[] = JSON.parse(stored);
+        const updatedAll = all.map(c => (c._id && c._id === id) || c.code === editingCode.code ? updatedObj : c);
+        localStorage.setItem("bg_ref_codes", JSON.stringify(updatedAll));
+      }
+    } catch (e) {}
+
+    setEditingCode(null);
+  };
+
   const toggleCode = async (idx: number) => {
     const codeObj = codes[idx];
-    const id = (codeObj as any)._id;
+    const id = codeObj._id;
     if(!id) return;
 
     try {
@@ -599,7 +865,7 @@ const ReferralTab = () => {
 
   const deleteCode = async (idx: number) => {
     const codeObj = codes[idx];
-    const id = (codeObj as any)._id;
+    const id = codeObj._id;
     if(!id) {
       setCodes(codes.filter((_, i) => i !== idx));
       return;
@@ -620,12 +886,12 @@ const ReferralTab = () => {
   return (
     <div>
       <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mb-1">Referral Codes</h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">Manage codes that students can use for 10% instant discount. Each code is single-use.</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">Generate &amp; manage discount codes assigned to specific payment plans or all plans. Each code is single-use.</p>
 
       {/* Add Code */}
       <Card className="p-6 mb-6">
         <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold mb-3">Add New Code</p>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
             placeholder="e.g. SUMMER10"
@@ -633,14 +899,23 @@ const ReferralTab = () => {
             onChange={(e) => setNewCode(e.target.value.toUpperCase())}
             className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/10 rounded-xl text-slate-900 dark:text-white text-base outline-none focus:border-indigo-500 transition duration-200"
           />
+          <select
+            value={selectedPlanType}
+            onChange={(e) => setSelectedPlanType(e.target.value)}
+            className="px-4 py-3 bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/10 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:border-indigo-500 transition duration-200 font-semibold"
+          >
+            <option value="all">All Plans ({defDisc}% OFF)</option>
+            <option value="one-time">One-Time Plan ({oneTimeDisc}% OFF)</option>
+            <option value="inst-1">1st Installment ({inst1Disc}% OFF)</option>
+            <option value="inst-2">2nd Installment ({inst2Disc}% OFF)</option>
+          </select>
           <button onClick={addCode}
-            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white text-sm font-bold rounded-xl transition duration-200 cursor-pointer border-none flex items-center gap-1.5 shadow-sm active:scale-[0.98]">
+            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white text-sm font-bold rounded-xl transition duration-200 cursor-pointer border-none flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] shrink-0">
             <FaPlus className="text-xs" /> Add Code
           </button>
         </div>
       </Card>
 
-      {/* Search and Filters */}
       {/* Search and Filters */}
       <div className="flex flex-col gap-4 mb-5">
         <div className="flex flex-col xl:flex-row gap-4 w-full">
@@ -698,7 +973,7 @@ const ReferralTab = () => {
             <thead>
               <tr className="bg-slate-50/80 dark:bg-white/5 border-b border-slate-100 dark:border-white/5">
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Code</th>
-                <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Discount</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Discount &amp; Target Plan</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Creator</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Created</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
@@ -718,7 +993,9 @@ const ReferralTab = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-100 dark:border-indigo-500/20">{c.discount} OFF</span>
+                    <span className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-100 dark:border-indigo-500/20">
+                      {c.discount}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono">{c.creator || "admin"}</span>
@@ -731,9 +1008,14 @@ const ReferralTab = () => {
                     </button>
                   </td>
                   <td className="px-6 py-4">
-                    <button onClick={() => deleteCode(i)} className="text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition bg-transparent border-none cursor-pointer p-1">
-                      <FaTrash className="text-sm" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => openEditModal(c)} className="text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition bg-transparent border-none cursor-pointer p-1" title="Edit Code & Discount">
+                        <FaEdit className="text-sm" />
+                      </button>
+                      <button onClick={() => deleteCode(i)} className="text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition bg-transparent border-none cursor-pointer p-1" title="Delete Code">
+                        <FaTrash className="text-sm" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -744,6 +1026,90 @@ const ReferralTab = () => {
           </table>
         </div>
       </Card>
+
+      {/* EDIT REFERRAL CODE MODAL */}
+      {editingCode && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full border border-slate-200 dark:border-white/10 shadow-2xl">
+            <h3 className="text-lg font-extrabold text-slate-900 dark:text-white mb-4 flex items-center justify-between">
+              <span>✏️ Edit Referral Code</span>
+              <button onClick={() => setEditingCode(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-sm bg-transparent border-none cursor-pointer">✕</button>
+            </h3>
+
+            <div className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Referral Code String</label>
+                <input
+                  type="text"
+                  value={editModalForm.code}
+                  onChange={(e) => setEditModalForm({ ...editModalForm, code: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white font-mono font-bold text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Target Plan</label>
+                <select
+                  value={editModalForm.planType}
+                  onChange={(e) => {
+                    const pType = e.target.value;
+                    let label = editModalForm.discount;
+                    if (pType === "one-time") label = `${oneTimeDisc}% OFF (One-Time Plan)`;
+                    else if (pType === "inst-1") label = `${inst1Disc}% OFF (1st Inst.)`;
+                    else if (pType === "inst-2") label = `${inst2Disc}% OFF (2nd Inst.)`;
+                    else if (pType === "all") label = `${defDisc}% OFF (All Plans)`;
+                    setEditModalForm({ ...editModalForm, planType: pType, discount: label });
+                  }}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white font-semibold text-sm outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Plans ({defDisc}% OFF)</option>
+                  <option value="one-time">One-Time Plan ({oneTimeDisc}% OFF)</option>
+                  <option value="inst-1">1st Installment ({inst1Disc}% OFF)</option>
+                  <option value="inst-2">2nd Installment ({inst2Disc}% OFF)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Discount Label / Text</label>
+                <input
+                  type="text"
+                  value={editModalForm.discount}
+                  onChange={(e) => setEditModalForm({ ...editModalForm, discount: e.target.value })}
+                  placeholder="e.g. 15% OFF (One-Time Plan)"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white font-semibold text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                <select
+                  value={editModalForm.active ? "active" : "inactive"}
+                  onChange={(e) => setEditModalForm({ ...editModalForm, active: e.target.value === "active" })}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white font-semibold text-sm outline-none focus:border-indigo-500"
+                >
+                  <option value="active">Active (Available)</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  onClick={() => setEditingCode(null)}
+                  className="flex-1 py-2.5 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl border-none cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEditCode}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-700 text-white text-xs font-bold rounded-xl border-none cursor-pointer shadow-md"
+                >
+                  Save Code Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -762,32 +1128,79 @@ const SubAdminCodesTab = ({ username }: { username: string }) => {
   });
   const [copied, setCopied] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [targetPlan, setTargetPlan] = useState("all");
+  const [planCfg, setPlanCfg] = useState<PlanConfig>(loadPlanConfig);
+
+  useEffect(() => {
+    fetch("/api/planconfig")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.courseName) setPlanCfg(prev => ({ ...prev, ...data }));
+      })
+      .catch(e => console.warn(e));
+
+    fetch("/api/refcodes")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (Array.isArray(data)) {
+          const userCodes = data.filter((c: any) => c.creator && c.creator.toLowerCase() === username.toLowerCase());
+          setMyCodes(userCodes);
+        }
+      })
+      .catch(e => console.warn(e));
+  }, [username]);
+
+  const defDisc = Number(planCfg.discountPercent) || 10;
+  const oneTimeDisc = Number(planCfg.oneTimeDiscountPercent !== undefined && planCfg.oneTimeDiscountPercent !== "" ? planCfg.oneTimeDiscountPercent : defDisc) || defDisc;
+  const inst1Disc = Number(planCfg.installment1DiscountPercent !== undefined && planCfg.installment1DiscountPercent !== "" ? planCfg.installment1DiscountPercent : defDisc) || defDisc;
+  const inst2Disc = Number(planCfg.installment2DiscountPercent !== undefined && planCfg.installment2DiscountPercent !== "" ? planCfg.installment2DiscountPercent : defDisc) || defDisc;
 
   const generateCode = () => {
     setGenerating(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const hex = Math.random().toString(16).substr(2, 6).toUpperCase();
       const newCodeStr = `BG-${username.toUpperCase()}-${hex}`;
+
+      let discountLabel = `${defDisc}% OFF`;
+      if (targetPlan === "one-time") discountLabel = `${oneTimeDisc}% OFF (One-Time Plan)`;
+      else if (targetPlan === "inst-1") discountLabel = `${inst1Disc}% OFF (1st Inst.)`;
+      else if (targetPlan === "inst-2") discountLabel = `${inst2Disc}% OFF (2nd Inst.)`;
+
+      const newEntry: RefCode = {
+        code: newCodeStr,
+        discount: discountLabel,
+        planType: targetPlan,
+        active: true,
+        created: new Date().toISOString().split("T")[0],
+        uses: 0,
+        creator: username
+      };
+
       try {
-        const stored = localStorage.getItem("bg_ref_codes");
-        const allCodes: RefCode[] = stored ? JSON.parse(stored) : [];
-        // Prevent duplicates
-        if (!allCodes.some(c => c.code === newCodeStr)) {
-          const newEntry: RefCode = {
-            code: newCodeStr,
-            discount: "10%",
-            active: true,
-            created: new Date().toISOString().split("T")[0],
-            uses: 0,
-            creator: username
-          };
-          const updatedAll = [...allCodes, newEntry];
-          localStorage.setItem("bg_ref_codes", JSON.stringify(updatedAll));
-          setMyCodes(prev => [...prev, newEntry]);
+        const res = await fetch("/api/refcodes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newEntry)
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setMyCodes(prev => [saved, ...prev]);
+        } else {
+          setMyCodes(prev => [newEntry, ...prev]);
         }
       } catch (e) {
         console.error("Error generating code:", e);
+        setMyCodes(prev => [newEntry, ...prev]);
       }
+
+      try {
+        const stored = localStorage.getItem("bg_ref_codes");
+        const allCodes: RefCode[] = stored ? JSON.parse(stored) : [];
+        if (!allCodes.some(c => c.code === newCodeStr)) {
+          localStorage.setItem("bg_ref_codes", JSON.stringify([...allCodes, newEntry]));
+        }
+      } catch (e) {}
+
       setGenerating(false);
     }, 400);
   };
@@ -802,34 +1215,47 @@ const SubAdminCodesTab = ({ username }: { username: string }) => {
     <div>
       <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mb-1">My Referral Codes</h2>
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">
-        Generate unique single-use codes for each student. Share the code and once they register, it gets marked as used.
+        Generate unique single-use referral codes for your students tied to specific payment plans.
       </p>
 
-      {/* Generate Button */}
+      {/* Generate Button Card */}
       <Card className="p-6 mb-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
           <div>
             <p className="text-sm font-bold text-slate-900 dark:text-white mb-1">Generate New Code</p>
             <p className="text-xs text-slate-500 dark:text-slate-400">Format: <span className="font-mono font-bold">BG-{username.toUpperCase()}-XXXXXX</span></p>
           </div>
-          <button
-            onClick={generateCode}
-            disabled={generating}
-            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white text-sm font-bold rounded-xl transition duration-200 cursor-pointer border-none flex items-center gap-2 shadow-sm active:scale-[0.98] disabled:opacity-60"
-          >
-            {generating ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full" /> : <FaPlus className="text-xs" />}
-            Generate Code
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select
+              value={targetPlan}
+              onChange={(e) => setTargetPlan(e.target.value)}
+              className="px-4 py-2.5 bg-slate-50 border border-slate-200 dark:bg-white/5 dark:border-white/10 rounded-xl text-slate-900 dark:text-white text-sm outline-none focus:border-indigo-500 transition font-semibold"
+            >
+              <option value="all">All Plans ({defDisc}% OFF)</option>
+              <option value="one-time">One-Time Plan ({oneTimeDisc}% OFF)</option>
+              <option value="inst-1">1st Installment ({inst1Disc}% OFF)</option>
+              <option value="inst-2">2nd Installment ({inst2Disc}% OFF)</option>
+            </select>
+            <button
+              onClick={generateCode}
+              disabled={generating}
+              className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white text-sm font-bold rounded-xl transition duration-200 cursor-pointer border-none flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] disabled:opacity-60 shrink-0"
+            >
+              {generating ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full" /> : <FaPlus className="text-xs" />}
+              Generate Code
+            </button>
+          </div>
         </div>
       </Card>
 
       {/* Codes Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[500px]">
+          <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="bg-slate-50/80 dark:bg-white/5 border-b border-slate-100 dark:border-white/5">
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Code</th>
+                <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Discount &amp; Target Plan</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Created</th>
                 <th className="text-left px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
               </tr>
@@ -837,7 +1263,7 @@ const SubAdminCodesTab = ({ username }: { username: string }) => {
             <tbody>
               {myCodes.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm font-semibold">
+                  <td colSpan={4} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm font-semibold">
                     No codes generated yet. Click "Generate Code" to create one.
                   </td>
                 </tr>
@@ -852,6 +1278,11 @@ const SubAdminCodesTab = ({ username }: { username: string }) => {
                         </button>
                         {copied === c.code && <span className="text-[10px] text-green-600 dark:text-green-400 font-bold uppercase">Copied!</span>}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-100 dark:border-indigo-500/20">
+                        {c.discount}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm font-medium">{c.created}</td>
                     <td className="px-6 py-4">
@@ -873,6 +1304,7 @@ const SubAdminCodesTab = ({ username }: { username: string }) => {
     </div>
   );
 };
+
 
 // ═══════════════════════════════════════════════════════════════════════
 // SUB ADMINS TAB

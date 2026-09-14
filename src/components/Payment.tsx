@@ -1,5 +1,5 @@
 import { FaQrcode } from "react-icons/fa";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import qr from "../assets/qr-beangate.png";
@@ -10,6 +10,13 @@ import {
 declare const SpreadsheetApp: any;
 declare const ContentService: any;
 
+const getPlanCfg = () => {
+  try {
+    const s = localStorage.getItem("bg_plan_config");
+    return s ? JSON.parse(s) : null;
+  } catch { return null; }
+};
+
 function Payment() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -17,78 +24,213 @@ function Payment() {
   const initialDiscountApplied = location.state?.discountApplied || false;
   const initialReferralCode = location.state?.referralCode || (initialDiscountApplied ? "BEANGATE10" : "");
 
+  const [selectedPlanId, setSelectedPlanId] = useState(preSelectedPlanId);
   const [discountAppliedState, setDiscountAppliedState] = useState(initialDiscountApplied);
   const [promoCode, setPromoCode] = useState(initialReferralCode);
   const [promoError, setPromoError] = useState("");
-  const [promoSuccess, setPromoSuccess] = useState(initialDiscountApplied ? "Referral code applied! 10% Discount saved." : "");
+  const [promoSuccess, setPromoSuccess] = useState(initialDiscountApplied ? "Referral code applied! Discount saved." : "");
+  const [appliedCodeInfo, setAppliedCodeInfo] = useState<any>(null);
 
-  const handleApplyPromoCode = () => {
-    let validCodes = ["BEANGATE10", "REF10", "MERN10"];
-    let parsed: any[] = [];
+  const [adminCfg, setAdminCfg] = useState<any>(getPlanCfg());
+
+  const fetchConfig = async () => {
     try {
-      const stored = localStorage.getItem("bg_ref_codes");
-      if (stored) {
-        parsed = JSON.parse(stored);
-        validCodes = parsed.map((c: any) => c.code.trim().toUpperCase());
+      const res = await fetch("/api/planconfig");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.courseName) {
+          setAdminCfg(data);
+          try { localStorage.setItem("bg_plan_config", JSON.stringify(data)); } catch (e) {}
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.warn("Payment page could not fetch planconfig from API:", e);
     }
+  };
 
-    const inputCode = promoCode.trim().toUpperCase();
-    if (validCodes.includes(inputCode)) {
-      const matchedCode = parsed.find((c: any) => c.code.trim().toUpperCase() === inputCode);
-      if (matchedCode && (!matchedCode.active || (matchedCode.uses || 0) > 0)) {
-        setPromoError("This referral code has already been used.");
-        setPromoSuccess("");
+  useEffect(() => {
+    fetchConfig();
+    const handleUpdate = () => {
+      setAdminCfg(getPlanCfg());
+      fetchConfig();
+    };
+    window.addEventListener("planConfigUpdated", handleUpdate);
+    return () => window.removeEventListener("planConfigUpdated", handleUpdate);
+  }, []);
+
+  const handleSelectPlan = (planId: string) => {
+    setSelectedPlanId(planId);
+    if (discountAppliedState && appliedCodeInfo) {
+      const pType = appliedCodeInfo.planType || "all";
+      if (pType !== "all" && pType !== planId) {
+        const planNames: Record<string, string> = {
+          "one-time": "One-Time Payment Plan",
+          "inst-1": "1st Installment Plan",
+          "inst-2": "2nd Installment Plan"
+        };
         setDiscountAppliedState(false);
-      } else {
-        setDiscountAppliedState(true);
-        setPromoSuccess("Referral code applied! 10% Discount saved.");
-        setPromoError("");
-      }
-    } else {
-      const isFallbackDefault = ["BEANGATE10", "REF10", "MERN10"].includes(inputCode);
-      if (isFallbackDefault) {
-        setDiscountAppliedState(true);
-        setPromoSuccess("Referral code applied! 10% Discount saved.");
-        setPromoError("");
-      } else {
-        setPromoError("Invalid referral code.");
         setPromoSuccess("");
+        setPromoError(`Referral code '${appliedCodeInfo.code}' is valid only for ${planNames[pType] || pType}. Discount removed for ${planNames[planId] || planId}.`);
       }
     }
   };
 
+  const handleApplyPromoCode = async () => {
+    let parsed: any[] = [];
+    try {
+      const res = await fetch("/api/refcodes");
+      if (res.ok) {
+        parsed = await res.json();
+      }
+    } catch (e) {}
+
+    if (!parsed || parsed.length === 0) {
+      try {
+        const stored = localStorage.getItem("bg_ref_codes");
+        if (stored) parsed = JSON.parse(stored);
+      } catch (e) {}
+    }
+
+    const inputCode = promoCode.trim().toUpperCase();
+    if (!inputCode) {
+      setPromoError("Please enter a referral code.");
+      return;
+    }
+
+    const matchedCode = parsed.find((c: any) => c.code && c.code.trim().toUpperCase() === inputCode);
+    const isFallbackDefault = ["BEANGATE10", "REF10", "MERN10"].includes(inputCode);
+
+    if (matchedCode) {
+      if (!matchedCode.active || (matchedCode.uses || 0) > 0) {
+        setPromoError("This referral code has already been used.");
+        setPromoSuccess("");
+        setDiscountAppliedState(false);
+        setAppliedCodeInfo(null);
+        return;
+      }
+
+      const pType = matchedCode.planType || "all";
+      if (pType !== "all" && pType !== selectedPlanId) {
+        const planNames: Record<string, string> = {
+          "one-time": "One-Time Payment Plan",
+          "inst-1": "1st Installment Plan",
+          "inst-2": "2nd Installment Plan"
+        };
+        setPromoError(`This referral code is valid only for ${planNames[pType] || pType}.`);
+        setPromoSuccess("");
+        setDiscountAppliedState(false);
+        setAppliedCodeInfo(null);
+        return;
+      }
+
+      setDiscountAppliedState(true);
+      setAppliedCodeInfo(matchedCode);
+      setPromoSuccess(`Referral code '${matchedCode.code}' applied! ${matchedCode.discount || "Discount saved."}`);
+      setPromoError("");
+    } else if (isFallbackDefault) {
+      const fallbackObj = { code: inputCode, discount: "10% OFF", planType: "all" };
+      setDiscountAppliedState(true);
+      setAppliedCodeInfo(fallbackObj);
+      setPromoSuccess(`Referral code '${inputCode}' applied! 10% Discount saved.`);
+      setPromoError("");
+    } else {
+      setPromoError("Invalid referral code.");
+      setPromoSuccess("");
+      setDiscountAppliedState(false);
+      setAppliedCodeInfo(null);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setDiscountAppliedState(false);
+    setPromoCode("");
+    setPromoSuccess("");
+    setPromoError("");
+    setAppliedCodeInfo(null);
+  };
+
+  const oneTimePrice = adminCfg?.oneTimePrice ?? 6000;
+  const inst1Price   = adminCfg?.installment1Price ?? 3200;
+  const inst2Price   = adminCfg?.installment2Price ?? 3200;
+
+  const defaultDiscPct = adminCfg?.discountPercent ?? 10;
+  const oneTimeDiscPct = adminCfg?.oneTimeDiscountPercent ?? defaultDiscPct;
+  const inst1DiscPct   = adminCfg?.installment1DiscountPercent ?? defaultDiscPct;
+  const inst2DiscPct   = adminCfg?.installment2DiscountPercent ?? defaultDiscPct;
+
+  const getDiscPctForPlan = (planId: string) => {
+    if (appliedCodeInfo && appliedCodeInfo.discount) {
+      const match = appliedCodeInfo.discount.match(/(\d+)%/);
+      if (match && match[1]) {
+        return Number(match[1]);
+      }
+    }
+    if (planId === "one-time") return oneTimeDiscPct;
+    if (planId === "inst-1") return inst1DiscPct;
+    if (planId === "inst-2") return inst2DiscPct;
+    return defaultDiscPct;
+  };
+
+  const calcPlanDetails = (planId: string, basePrice: number) => {
+    const discPct = getDiscPctForPlan(planId);
+    const isDiscounted = discountAppliedState;
+    const discountVal = isDiscounted ? Math.round(basePrice * (discPct / 100)) : 0;
+    const discountedBase = basePrice - discountVal;
+    const gstAmount = Math.round(discountedBase * 0.18);
+    const totalAmount = discountedBase + gstAmount;
+
+    return {
+      planId,
+      basePrice,
+      discPct,
+      discountVal,
+      discountedBase,
+      gstAmount,
+      totalAmount,
+      formattedBase: `₹${basePrice.toLocaleString("en-IN")}`,
+      formattedDiscount: `-₹${discountVal.toLocaleString("en-IN")}`,
+      formattedDiscountedBase: `₹${discountedBase.toLocaleString("en-IN")}`,
+      formattedGst: `₹${gstAmount.toLocaleString("en-IN")}`,
+      formattedTotal: `₹${totalAmount.toLocaleString("en-IN")}`
+    };
+  };
+
+  const oneTimeDetails = calcPlanDetails("one-time", oneTimePrice);
+  const inst1Details   = calcPlanDetails("inst-1", inst1Price);
+  const inst2Details   = calcPlanDetails("inst-2", inst2Price);
+
   const paymentPlans = [
     {
       id: "one-time",
-      title: discountAppliedState ? "MERN Stack - One-Time (10% Code Applied)" : "MERN Stack - One-Time Payment",
-      price: discountAppliedState ? "₹5,400" : "₹6,000",
-      total: discountAppliedState ? "₹5,400" : "₹6,000",
-      description: discountAppliedState ? "Special discounted price (10% OFF applied)" : "Pay full course fee once and save ₹400",
-      tag: discountAppliedState ? "Promo Applied" : "Best Value"
+      title: discountAppliedState ? `MERN Stack - One-Time (${oneTimeDetails.discPct}% OFF Applied)` : "MERN Stack - One-Time Payment",
+      price: discountAppliedState ? oneTimeDetails.formattedDiscountedBase : oneTimeDetails.formattedBase,
+      total: oneTimeDetails.formattedTotal,
+      description: discountAppliedState ? `Special discounted price (${oneTimeDetails.discPct}% OFF applied + 18% GST)` : "Pay full course fee once (Includes 18% GST)",
+      tag: discountAppliedState ? "Promo Applied" : "Best Value",
+      details: oneTimeDetails
     },
     {
       id: "inst-1",
-      title: discountAppliedState ? "MERN Stack - 1st Installment (10% OFF)" : "MERN Stack - 1st Installment",
-      price: discountAppliedState ? "₹2,880" : "₹3,200",
-      total: discountAppliedState ? "₹2,880" : "₹3,200",
-      description: discountAppliedState ? "First installment (10% OFF applied)" : "First installment to start the course",
-      tag: "Flexible"
+      title: discountAppliedState ? `MERN Stack - 1st Installment (${inst1Details.discPct}% OFF Applied)` : "MERN Stack - 1st Installment",
+      price: discountAppliedState ? inst1Details.formattedDiscountedBase : inst1Details.formattedBase,
+      total: inst1Details.formattedTotal,
+      description: discountAppliedState ? `First installment (${inst1Details.discPct}% OFF applied + 18% GST)` : "First installment to start the course (Includes 18% GST)",
+      tag: "Flexible",
+      details: inst1Details
     },
     {
       id: "inst-2",
-      title: discountAppliedState ? "MERN Stack - 2nd Installment (10% OFF)" : "MERN Stack - 2nd Installment",
-      price: discountAppliedState ? "₹2,880" : "₹3,200",
-      total: discountAppliedState ? "₹2,880" : "₹3,200",
-      description: discountAppliedState ? "Second installment (10% OFF applied)" : "Second installment during the course",
-      tag: "Flexible"
+      title: discountAppliedState ? `MERN Stack - 2nd Installment (${inst2Details.discPct}% OFF Applied)` : "MERN Stack - 2nd Installment",
+      price: discountAppliedState ? inst2Details.formattedDiscountedBase : inst2Details.formattedBase,
+      total: inst2Details.formattedTotal,
+      description: discountAppliedState ? `Second installment (${inst2Details.discPct}% OFF applied + 18% GST)` : "Second installment during the course (Includes 18% GST)",
+      tag: "Flexible",
+      details: inst2Details
     }
   ];
 
-  const [selectedPlanId, setSelectedPlanId] = useState(preSelectedPlanId);
   const selectedPlan = paymentPlans.find((p) => p.id === selectedPlanId) || paymentPlans[0];
+
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
@@ -332,17 +474,133 @@ function Payment() {
               {/* Premium Glow Accent */}
               <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500"></div>
               
-              <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-violet-100 text-violet-700 border border-violet-200 inline-block mb-4">
-                Active Selection
-              </span>
-              <h3 className="text-lg font-black text-slate-950 mb-1.5 leading-snug">{selectedPlan.title}</h3>
-              <p className="text-xs text-slate-600 mb-6 font-bold leading-relaxed">{selectedPlan.description}</p>
-              
-              <div className="flex items-baseline justify-between border-t border-slate-200 pt-4">
-                <span className="text-xs text-slate-700 uppercase tracking-widest font-black">Total Payable:</span>
-                <span className="text-2xl font-black text-[#ff5500] tracking-tight">
-                  {selectedPlan.total}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-violet-100 text-violet-700 border border-violet-200 inline-block">
+                  Selected Plan
                 </span>
+                {discountAppliedState && (
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 inline-block">
+                    ✓ Code Applied
+                  </span>
+                )}
+              </div>
+
+              {/* Plan Switcher Tabs */}
+              <div className="mb-4">
+                <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-black mb-1.5">Switch Payment Plan:</label>
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100/80 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPlan("one-time")}
+                    className={`py-1.5 px-2 text-[11px] font-extrabold rounded-lg transition duration-200 cursor-pointer border-none text-center ${
+                      selectedPlanId === "one-time" ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-900 bg-transparent"
+                    }`}
+                  >
+                    One-Time
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPlan("inst-1")}
+                    className={`py-1.5 px-2 text-[11px] font-extrabold rounded-lg transition duration-200 cursor-pointer border-none text-center ${
+                      selectedPlanId === "inst-1" ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-900 bg-transparent"
+                    }`}
+                  >
+                    1st Inst.
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPlan("inst-2")}
+                    className={`py-1.5 px-2 text-[11px] font-extrabold rounded-lg transition duration-200 cursor-pointer border-none text-center ${
+                      selectedPlanId === "inst-2" ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-900 bg-transparent"
+                    }`}
+                  >
+                    2nd Inst.
+                  </button>
+                </div>
+              </div>
+
+              <h3 className="text-lg font-black text-slate-950 mb-1 leading-snug">{selectedPlan.title}</h3>
+              <p className="text-xs text-slate-600 mb-4 font-bold leading-relaxed">{selectedPlan.description}</p>
+              
+              {/* Promo / Referral Code Box */}
+              <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-[10px] text-slate-600 uppercase tracking-wider font-black mb-1.5">
+                  🎟️ Have a Referral Code?
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. BEANGATE10"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase outline-none focus:border-violet-600 transition"
+                  />
+                  {discountAppliedState ? (
+                    <button
+                      type="button"
+                      onClick={handleRemovePromo}
+                      className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold rounded-xl transition border-none cursor-pointer shrink-0"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleApplyPromoCode}
+                      className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl transition border-none cursor-pointer shadow-sm shrink-0"
+                    >
+                      Apply
+                    </button>
+                  )}
+                </div>
+                {promoSuccess && (
+                  <p className="text-[11px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1">
+                    ✓ {promoSuccess}
+                  </p>
+                )}
+                {promoError && (
+                  <p className="text-[11px] text-red-500 font-bold mt-1.5 leading-tight">
+                    ⚠ {promoError}
+                  </p>
+                )}
+              </div>
+
+              {/* Fee Breakdown Table */}
+              <div className="space-y-2 border-t border-slate-200 pt-4 mb-4 text-xs font-semibold">
+                <div className="flex justify-between text-slate-600">
+                  <span>Base Plan Fee:</span>
+                  <span className="font-bold text-slate-900">{selectedPlan.details.formattedBase}</span>
+                </div>
+                {discountAppliedState && (
+                  <div className="flex justify-between text-emerald-600 font-extrabold bg-emerald-50/80 p-2 rounded-xl border border-emerald-100">
+                    <span>Referral Discount ({selectedPlan.details.discPct}% OFF):</span>
+                    <span>{selectedPlan.details.formattedDiscount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-600">
+                  <span>Net Fee (After Discount):</span>
+                  <span className="font-bold text-slate-900">{selectedPlan.details.formattedDiscountedBase}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>GST (18% on Net Fee):</span>
+                  <span className="font-bold text-slate-900">{selectedPlan.details.formattedGst}</span>
+                </div>
+              </div>
+
+              {/* Total Payment & Discount Saved Card */}
+              <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200/80 rounded-2xl p-4 text-left shadow-sm">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-slate-800 uppercase tracking-wider font-black">Total Amount Payable:</span>
+                  <span className="text-2xl font-black text-[#ff5500] tracking-tight">
+                    {selectedPlan.total}
+                  </span>
+                </div>
+                {discountAppliedState && (
+                  <div className="text-xs font-black text-emerald-700 mt-2 pt-2 border-t border-orange-200/60 flex items-center justify-between">
+                    <span>🎉 Total Discount Received:</span>
+                    <span className="text-sm font-extrabold text-emerald-700">{selectedPlan.details.formattedDiscount}</span>
+                  </div>
+                )}
               </div>
             </div>
 
