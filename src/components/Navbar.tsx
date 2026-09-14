@@ -22,6 +22,7 @@ const navLinks = [
   { name: "Course", id: "course" },
   { name: "Curriculum", id: "curriculum" },
   { name: "Projects", id: "projects" },
+  { name: "Pricing", id: "pricing" },
   { name: "Why BeanGate", id: "why-beangate" },
   { name: "FAQ", id: "faq" },
   { name: "Contact", id: "contact" },

@@ -1,7 +1,7 @@
 import React from "react";
 import bgImage from "../assets/bg.png";
-import { FaCheckCircle } from "react-icons/fa";
-import { FaReact, FaNodeJs } from "react-icons/fa";
+import imageman from "../assets/imageman.png";
+import { FaCheckCircle, FaReact, FaNodeJs } from "react-icons/fa";
 import { SiExpress, SiMongodb } from "react-icons/si";
 
 const Hero = () => {
@@ -16,55 +16,66 @@ const Hero = () => {
         backgroundImage: `url(${bgImage})`,
       }}
     >
-      {/* Dark overlay */}
-      <div className="absolute inset-0 bg-[#071428]/85"></div>
+      {/* Dark space overlay */}
+      <div className="absolute inset-0 bg-[#060e20]/90"></div>
 
       <div className="relative z-10 max-w-[1400px] mx-auto w-full px-5 sm:px-8">
-        <div className="grid lg:grid-cols-12 gap-10 items-center">
+        <div className="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
           
           {/* LEFT COLUMN */}
-          <div className="lg:col-span-7 text-left space-y-5">
+          <div className="lg:col-span-7 text-left space-y-6">
             
-            {/* Industry Level Training Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/30 text-blue-400 text-xs font-bold tracking-wider uppercase">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+            {/* Pill Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0d1f3d] border border-blue-500/30 text-blue-400 text-xs font-bold tracking-wider uppercase shadow-md">
+              <span className="w-2 h-2 rounded-full bg-blue-400"></span>
               INDUSTRY-LEVEL TRAINING
             </div>
 
             {/* Main Headline */}
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black leading-tight text-white tracking-tight">
-              <span className="text-[#ff5500]">MERN</span> Stack{" "}
-              <br className="hidden sm:inline" />
-              Practical Training with Real-World Projects
-            </h1>
+            <div>
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-none">
+                <span className="text-[#ff5500]">MERN</span> STACK
+              </h1>
+              <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight mt-2 leading-tight">
+                Practical Training with Real-World Projects
+              </h2>
+            </div>
 
             {/* Subtitle arrows */}
-            <p className="text-white text-base sm:text-xl font-bold tracking-wide flex items-center gap-2">
-              Learn <span className="text-[#ff5500]">→</span> Code <span className="text-[#ff5500]">→</span> Build <span className="text-[#ff5500]">→</span> Lead
+            <p className="text-white text-base sm:text-lg font-extrabold tracking-wide flex items-center gap-3">
+              <span className="text-[#ff5500]">Learn</span>
+              <span className="text-gray-300">→</span>
+              <span className="text-[#ff5500]">Code</span>
+              <span className="text-gray-300">→</span>
+              <span className="text-[#ff5500]">Build</span>
+              <span className="text-gray-300">→</span>
+              <span className="text-[#ff5500]">Lead</span>
             </p>
 
-            {/* Paragraph */}
+            {/* Description */}
             <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed max-w-xl font-medium">
               Master Frontend, Backend and Database by building real-world applications from scratch. Gain practical skills and become industry-ready.
             </p>
 
-            {/* Special Offer Card + Checklist */}
-            <div className="grid sm:grid-cols-12 gap-5 bg-[#091833]/90 border border-white/10 rounded-2xl p-5 max-w-2xl shadow-2xl">
+            {/* Special Offer Card + Checklist Box */}
+            <div className="grid sm:grid-cols-12 gap-5 bg-[#09152e]/90 border border-[#16274e] rounded-2xl p-5 max-w-xl shadow-2xl backdrop-blur-md">
               
-              {/* Fee Block */}
+              {/* Left Fee Block */}
               <div className="sm:col-span-5 flex flex-col justify-center border-b sm:border-b-0 sm:border-r border-white/10 pb-4 sm:pb-0 sm:pr-4 text-left">
-                <p className="text-[10px] text-orange-400 font-extrabold uppercase tracking-widest mb-1">
-                  SPECIAL OFFER
-                </p>
-                <h2 className="text-4xl sm:text-5xl font-black text-[#ff5500] tracking-tight">
+                <div className="mb-2">
+                  <span className="border border-orange-500/40 text-orange-400 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold tracking-widest uppercase inline-block">
+                    SPECIAL OFFER
+                  </span>
+                </div>
+                <h3 className="text-4xl sm:text-5xl font-black text-[#ff5500] tracking-tight leading-none">
                   ₹6,499
-                </h2>
-                <p className="text-gray-300 text-xs font-semibold mt-1">
+                </h3>
+                <p className="text-gray-400 text-xs font-semibold mt-1">
                   One-Time Course Fee
                 </p>
               </div>
 
-              {/* Checklist Block */}
+              {/* Right Checklist Block */}
               <div className="sm:col-span-7 flex flex-col justify-center sm:pl-2 space-y-2 text-left">
                 {[
                   "Real-World Projects",
@@ -82,10 +93,10 @@ const Hero = () => {
             </div>
 
             {/* CTA BUTTON */}
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={scrollToRegister}
-                className="w-full sm:w-auto px-8 py-3.5 bg-[#ff5500] hover:bg-[#e64d00] text-white rounded-lg font-black text-sm tracking-wider shadow-xl transition transform hover:-translate-y-0.5 cursor-pointer border-none"
+                className="w-full sm:w-auto px-9 py-3.5 bg-[#ff5500] hover:bg-[#e64d00] text-white rounded-xl font-black text-sm tracking-wider shadow-xl shadow-orange-500/20 transition transform hover:-translate-y-0.5 cursor-pointer border-none"
               >
                 JOIN NOW – ₹6,499
               </button>
@@ -96,63 +107,69 @@ const Hero = () => {
 
           </div>
 
-          {/* RIGHT COLUMN: Interactive Tech Graphics */}
-          <div className="hidden lg:col-span-5 lg:flex flex-col items-center justify-center relative">
+          {/* RIGHT COLUMN: Interactive Developer Card Frame */}
+          <div className="hidden lg:col-span-5 lg:flex flex-col items-center justify-center">
             
-            {/* Tech Hexagon Glow Box */}
-            <div className="relative w-full max-w-[420px] bg-gradient-to-b from-[#0e2246]/60 to-[#071428]/90 border border-cyan-500/20 rounded-3xl p-6 shadow-2xl backdrop-blur-md flex flex-col items-center">
+            {/* Dark Outer Box Frame */}
+            <div className="w-full max-w-[480px] bg-[#081229] border border-blue-900/60 rounded-3xl p-6 shadow-2xl relative flex flex-col">
               
-              {/* Graphic Title */}
-              <div className="relative mb-6 text-center">
-                <span className="text-2xl font-black text-cyan-400 tracking-widest uppercase">
-                  MERN STACK
-                </span>
+              {/* Outer Card Title */}
+              <h3 className="text-cyan-400 font-black text-xl tracking-widest uppercase mb-4 text-center">
+                MERN STACK
+              </h3>
+
+              {/* Photo Box with Overlaid Badges */}
+              <div className="relative rounded-2xl overflow-hidden mb-5 border border-white/10 shadow-lg group">
+                <img
+                  src={imageman}
+                  alt="Developer Workstation Setup"
+                  className="w-full h-[250px] object-cover object-center"
+                />
+
+                {/* Badge Top-Left: MongoDB */}
+                <div className="absolute top-3 left-3 bg-[#09152b]/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl flex items-center gap-2 text-white text-xs font-bold shadow-lg backdrop-blur-md">
+                  <SiMongodb className="text-emerald-400 text-sm" />
+                  <span>MongoDB</span>
+                </div>
+
+                {/* Badge Top-Right: Express.js */}
+                <div className="absolute top-3 right-3 bg-[#09152b]/90 border border-white/30 px-3 py-1.5 rounded-xl flex items-center gap-2 text-white text-xs font-bold shadow-lg backdrop-blur-md">
+                  <SiExpress className="text-gray-200 text-sm" />
+                  <span>Express.js</span>
+                </div>
+
+                {/* Badge Bottom-Left: React.js */}
+                <div className="absolute bottom-3 left-3 bg-[#09152b]/90 border border-sky-500/40 px-3 py-1.5 rounded-xl flex items-center gap-2 text-white text-xs font-bold shadow-lg backdrop-blur-md">
+                  <FaReact className="text-sky-400 text-sm animate-spin" style={{ animationDuration: '10s' }} />
+                  <span>React.js</span>
+                </div>
+
+                {/* Badge Bottom-Right: Node.js */}
+                <div className="absolute bottom-3 right-3 bg-[#09152b]/90 border border-green-500/40 px-3 py-1.5 rounded-xl flex items-center gap-2 text-white text-xs font-bold shadow-lg backdrop-blur-md">
+                  <FaNodeJs className="text-green-400 text-sm" />
+                  <span>Node.js</span>
+                </div>
               </div>
 
-              {/* Tech Icon Grid */}
-              <div className="grid grid-cols-2 gap-4 w-full mb-6">
+              {/* Bottom 3 Technology Cards */}
+              <div className="grid grid-cols-3 gap-3 w-full">
                 
-                <div className="bg-[#071428] border border-cyan-500/30 p-4 rounded-xl flex flex-col items-center justify-center">
-                  <SiMongodb className="text-3xl text-emerald-400 mb-1" />
-                  <span className="text-[10px] font-bold text-gray-300">MongoDB</span>
+                <div className="bg-[#050c1b] border border-blue-900/40 rounded-xl p-3 text-center flex flex-col items-center justify-center">
+                  <FaReact className="text-sky-400 text-lg mb-1" />
+                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Frontend</p>
+                  <p className="text-xs font-extrabold text-white mt-0.5">React.js</p>
                 </div>
 
-                <div className="bg-[#071428] border border-cyan-500/30 p-4 rounded-xl flex flex-col items-center justify-center">
-                  <SiExpress className="text-3xl text-gray-200 mb-1" />
-                  <span className="text-[10px] font-bold text-gray-300">Express.js</span>
+                <div className="bg-[#050c1b] border border-blue-900/40 rounded-xl p-3 text-center flex flex-col items-center justify-center">
+                  <FaNodeJs className="text-green-400 text-lg mb-1" />
+                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Backend</p>
+                  <p className="text-xs font-extrabold text-white mt-0.5">Node, Express</p>
                 </div>
 
-                <div className="bg-[#071428] border border-cyan-500/30 p-4 rounded-xl flex flex-col items-center justify-center">
-                  <FaReact className="text-3xl text-sky-400 mb-1 animate-spin" style={{ animationDuration: '10s' }} />
-                  <span className="text-[10px] font-bold text-gray-300">React.js</span>
-                </div>
-
-                <div className="bg-[#071428] border border-cyan-500/30 p-4 rounded-xl flex flex-col items-center justify-center">
-                  <FaNodeJs className="text-3xl text-green-400 mb-1" />
-                  <span className="text-[10px] font-bold text-gray-300">Node.js</span>
-                </div>
-
-              </div>
-
-              {/* 3 Pill Tabs at Bottom */}
-              <div className="grid grid-cols-3 gap-2 w-full pt-3 border-t border-white/10 text-center">
-                
-                <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-1">
-                  <FaReact className="text-sky-400 mx-auto text-sm mb-1" />
-                  <p className="text-[9px] font-bold text-white leading-tight">Frontend</p>
-                  <p className="text-[8px] text-gray-400">React.js</p>
-                </div>
-
-                <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-1">
-                  <SiExpress className="text-gray-200 mx-auto text-sm mb-1" />
-                  <p className="text-[9px] font-bold text-white leading-tight">Backend</p>
-                  <p className="text-[8px] text-gray-400">Node, Express</p>
-                </div>
-
-                <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-1">
-                  <SiMongodb className="text-emerald-400 mx-auto text-sm mb-1" />
-                  <p className="text-[9px] font-bold text-white leading-tight">Database</p>
-                  <p className="text-[8px] text-gray-400">MongoDB</p>
+                <div className="bg-[#050c1b] border border-blue-900/40 rounded-xl p-3 text-center flex flex-col items-center justify-center">
+                  <SiMongodb className="text-emerald-400 text-lg mb-1" />
+                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Database</p>
+                  <p className="text-xs font-extrabold text-white mt-0.5">MongoDB</p>
                 </div>
 
               </div>
