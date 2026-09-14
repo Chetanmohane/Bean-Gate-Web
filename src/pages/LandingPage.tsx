@@ -1,77 +1,50 @@
-import React, { useState } from "react";
-import { motion } from "framer-motion";
+import React from "react";
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
 import Stats from "../components/Stats";
 import Projects from "../components/Projects";
-import WhyChoose from "../components/WhyChoose";
 import Trainer from "../components/Trainer";
 import Offer from "../components/Offer";
 import FAQ from "../components/FAQ";
 import Footer from "../components/Footer";
 import Cartificate from "../components/Cartificate";
-import Pricing from "../components/Pricing";
 
 const LandingPage = () => {
-  const [selectedPlanId, setSelectedPlanId] = useState("one-time");
-  const [appliedDiscount, setAppliedDiscount] = useState(false);
-
-  const sectionProps = {
-    initial: { opacity: 0, y: 40 },
-    whileInView: { opacity: 1, y: 0 },
-    viewport: { once: false, amount: 0.1 },
-    transition: { duration: 0.6, ease: "easeOut" }
-  };
-
   return (
     <div className="font-sans text-gray-900 bg-gray-50 min-h-screen overflow-x-hidden">
       <Navbar />
 
-      <motion.section id="home" {...sectionProps}>
+      <section id="home">
         <Hero />
-      </motion.section>
+      </section>
 
-      <motion.section id="course" {...sectionProps}>
+      <section id="course">
         <Stats />
-      </motion.section>
+      </section>
 
-      <motion.section id="projects" className="scroll-mt-24" {...sectionProps}>
+      <section id="projects" className="scroll-mt-24">
         <Projects />
-      </motion.section>
+      </section>
 
-      <motion.section id="trainer" {...sectionProps}>
+      <section id="trainer">
         <Trainer />
-      </motion.section>
+      </section>
       
-      <motion.section id="cartificate" {...sectionProps}>
-        <Cartificate/>
-      </motion.section>
+      <section id="cartificate">
+        <Cartificate />
+      </section>
       
-      <motion.section id="pricing" {...sectionProps}>
-        <Pricing 
-          selectedPlanId={selectedPlanId} 
-          setSelectedPlanId={setSelectedPlanId} 
-          appliedDiscount={appliedDiscount} 
-          setAppliedDiscount={setAppliedDiscount} 
-        />
-      </motion.section>
-      
-      <motion.section id="reviews" {...sectionProps}>
-        <Offer 
-          selectedPlanId={selectedPlanId} 
-          setSelectedPlanId={setSelectedPlanId} 
-          appliedDiscount={appliedDiscount} 
-          setAppliedDiscount={setAppliedDiscount} 
-        />
-      </motion.section>
+      <section id="reviews">
+        <Offer />
+      </section>
 
-      <motion.section id="faq" {...sectionProps}>
+      <section id="faq">
         <FAQ />
-      </motion.section>
+      </section>
 
-      <motion.section id="contact" {...sectionProps}>
+      <section id="contact">
         <Footer />
-      </motion.section>
+      </section>
     </div>
   );
 };
