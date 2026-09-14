@@ -22,6 +22,8 @@ const navLinks = [
   { name: "Course", id: "course" },
   { name: "Projects", id: "projects" },
   { name: "Trainer", id: "trainer" },
+  { name: "Cartificates", id: "cartificate" },
+  { name: "Pricing", id: "pricing" },
   { name: "Reviews", id: "reviews" },
   { name: "FAQ", id: "faq" },
  
@@ -35,7 +37,7 @@ const navigate = useNavigate();
           : "bg-[#071428] py-4"
       }`}
     >
-      <div className="max-w-7xl mx-auto px-5">
+      <div className="max-w-[1400px] mx-auto px-5">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center">
@@ -58,9 +60,11 @@ const navigate = useNavigate();
     <a
       key={item.id}
       href={`#${item.id}`}
-      className="text-white/80 hover:text-white transition duration-300 font-medium"
+      className="relative text-white/80 hover:text-orange-400 transition-colors duration-300 font-medium text-sm tracking-wide group"
     >
       {item.name}
+      {/* Animated Underline */}
+      <span className="absolute -bottom-1.5 left-0 w-0 h-[2px] bg-gradient-to-r from-orange-400 to-amber-500 transition-all duration-300 ease-out group-hover:w-full rounded-full"></span>
     </a>
   ))}
 </div>
@@ -140,13 +144,13 @@ const navigate = useNavigate();
             transition={{ duration: 0.3 }}
             className="lg:hidden bg-[#071428] border-t border-white/10"
           >
-          <div className="flex flex-col px-6 py-5 space-y-5">
+          <div className="flex flex-col px-6 py-5 space-y-4">
   {navLinks.map((item) => (
     <a
       key={item.id}
       href={`#${item.id}`}
       onClick={() => setMenuOpen(false)}
-      className="text-white/80 hover:text-orange-400 transition text-lg"
+      className="block text-white/80 hover:text-orange-400 hover:translate-x-2 transition-all duration-300 text-lg font-medium border-b border-white/5 pb-3 last:border-0"
     >
       {item.name}
     </a>
